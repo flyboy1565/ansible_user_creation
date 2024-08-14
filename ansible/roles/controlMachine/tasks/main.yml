@@ -1,0 +1,45 @@
+---
+- name: Set user list as a fact
+  ansible.builtin.set_fact:
+    users:
+      - { username: "user1", email: "user1@example.com" }
+      - { username: "user2", email: "user2@example.com" }
+      # Add more users as needed
+
+- name: Loop through each user to create or update
+  ansible.builtin.include_tasks: user_tasks.yml
+  loop: "{{ users }}"
+  loop_control:
+    loop_var: user
+
+- name: Get the list of all system users
+  become: true
+  shell: getent passwd | grep '/home/' | cut -d':' -f1
+  register: system_users
+
+
+- name: Set list of system users
+  ansible.builtin.set_fact:
+    all_system_users: "{{ system_users.stdout_lines }}"
+
+- name: Set Defined Users Names
+  set_fact:
+    defined_usernames: "{{ users | map(attribute='username') | list }}"
+
+- name: Find users to remove (not in the user list)
+  ansible.builtin.set_fact:
+    users_to_remove: "{{ all_system_users | difference(defined_usernames) }}"
+
+- name: Remove users not in the user list
+  ansible.builtin.user:
+    name: "{{ item }}"
+    state: absent
+  loop: "{{ users_to_remove }}"
+  when: item not in ['root', 'vagrant', 'syslog']  # Add other system/service users as needed
+  ignore_errors: yes
+
+- name: Display a message for removed users
+  ansible.builtin.debug:
+    msg: "Removed user: {{ item }}"
+  loop: "{{ users_to_remove }}"
+  when: item not in ['root', 'vagrant', 'syslog']  # Add other system/service users as needed

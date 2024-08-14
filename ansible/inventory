@@ -1,0 +1,2 @@
+[controller]
+controller.homelab.com ansible_user=vagrant ansible_connection=local
