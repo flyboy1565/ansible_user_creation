@@ -1,0 +1,7 @@
+---
+- name: Setup Controller
+  hosts: controller
+  gather_facts: yes
+  become: yes
+  roles:
+    - controlMachine

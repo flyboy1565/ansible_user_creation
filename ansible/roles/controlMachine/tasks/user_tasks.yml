@@ -1,0 +1,56 @@
+---
+- name: Check if the user exists
+  ansible.builtin.command: "getent passwd {{ user.username }}"
+  register: user_check
+  ignore_errors: yes
+
+- name: Set fact for user existence
+  ansible.builtin.set_fact:
+    user_exists: "{{ 'found' if user_check.rc == 0 else 'not_found' }}"
+
+- name: Generate a random password for the user
+  ansible.builtin.set_fact:
+    password: "{{ lookup('password', '/dev/null length=12 chars=ascii_letters,digits') }}"
+  when: user_exists == 'not_found'
+
+- name: Hash the generated password
+  ansible.builtin.set_fact:
+    hashed_password: "{{ password | password_hash('sha512') }}"
+  when: user_exists == 'not_found'
+
+- name: Create the user with the hashed password
+  ansible.builtin.user:
+    name: "{{ user.username }}"
+    password: "{{ hashed_password }}"
+    update_password: on_create
+    expires: 0  # Force password change on first login
+  when: user_exists == 'not_found'
+
+- name: Gather IP address of the machine
+  ansible.builtin.setup:
+    filter: ansible_default_ipv4.address
+
+- name: Set email subject with IP address
+  ansible.builtin.set_fact:
+    email_subject: "Your new account details - Machine IP: {{ ansible_default_ipv4.address }}"
+
+- name: Send email with user credentials
+  ansible.builtin.mail:
+    host: smtp.gmail.com
+    port: 587
+    username: "your_gmail_username@gmail.com"
+    password: "your_gmail_app_password"
+    to: "{{ user.email }}"
+    subject: "{{ email_subject }}"
+    body: |
+      Hi {{ user.username }},
+
+      Your account has been created. Your initial password is: {{ password }}
+
+      Please log in and change your password immediately.
+
+      Regards,
+      Admin
+    secure: starttls
+  ignore_errors: yes
+  when: user_exists == 'not_found'
